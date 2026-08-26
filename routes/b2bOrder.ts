@@ -16,7 +16,27 @@ import * as utils from '../lib/utils'
 export function b2bOrder () {
   return ({ body }: Request, res: Response, next: NextFunction) => {
     if (utils.isChallengeEnabled(challenges.rceChallenge) || utils.isChallengeEnabled(challenges.rceOccupyChallenge)) {
-      const orderLinesData = body.orderLinesData || ''
+      const orderLinesData = (body && body.orderLinesData) || ''
+      if (typeof orderLinesData === 'string') {
+        const forbiddenKeywords = [
+          'constructor', 'prototype', '__proto__', 'process', 'require',
+          'import', 'function', 'global', 'window', 'self', 'globalthis',
+          'eval', 'exec', 'spawn', 'child_process', 'object', 'reflect',
+          'proxy', 'symbol', 'string', 'array', 'getprototypeof',
+          'getownpropertydescriptor', 'defineproperty', 'defineproperties',
+          'tostring', 'valueof', 'this'
+        ]
+        const lowerData = orderLinesData.toLowerCase()
+        const hasForbiddenKeyword = forbiddenKeywords.some(keyword => lowerData.includes(keyword))
+        const hasBackslash = orderLinesData.includes('\\')
+        const hasBrackets = orderLinesData.includes('[') || orderLinesData.includes(']')
+        const hasDot = orderLinesData.includes('.')
+
+        if (hasForbiddenKeyword || hasBackslash || hasBrackets || hasDot) {
+          res.status(400).json({ error: 'Blocked keyword or character detected' })
+          return
+        }
+      }
       try {
         const sandbox = { safeEval, orderLinesData }
         vm.createContext(sandbox)
