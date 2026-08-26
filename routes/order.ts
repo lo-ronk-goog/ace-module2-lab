@@ -144,6 +144,10 @@ export function placeOrder () {
           challengeUtils.solveIf(challenges.negativeOrderChallenge, () => { return totalPrice < 0 })
 
           if (req.body.UserId) {
+            if (!customer || !customer.data || Number(req.body.UserId) !== Number(customer.data.id)) {
+              next(new Error('Blocked illegal activity'))
+              return
+            }
             if (req.body.orderDetails && req.body.orderDetails.paymentId === 'wallet') {
               const wallet = await WalletModel.findOne({ where: { UserId: req.body.UserId } })
               if ((wallet != null) && wallet.balance >= totalPrice) {

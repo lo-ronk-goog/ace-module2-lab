@@ -17,6 +17,75 @@ import * as utils from '../lib/utils'
 
 const entities = new Entities()
 
+function safeEvaluate (code: string): string {
+  let remaining = code.trim()
+  let result = ''
+  let lastTokenWasValue = false
+
+  while (remaining.length > 0) {
+    const wsMatch = remaining.match(/^\s+/)
+    if (wsMatch) {
+      remaining = remaining.substring(wsMatch[0].length)
+      continue
+    }
+
+    const strMatch = remaining.match(/^'([^'\\]*(?:\\.[^'\\]*)*)'/) ||
+                     remaining.match(/^"([^"\\]*(?:\\.[^"\\]*)*)"/) ||
+                     remaining.match(/^`([^`\\]*(?:\\.[^`\\]*)*)`/)
+    if (strMatch) {
+      if (lastTokenWasValue) {
+        throw new Error('Unexpected string literal')
+      }
+      const content = strMatch[1]
+      const unescaped = content.replace(/\\(.)/g, '$1')
+      result += unescaped
+      lastTokenWasValue = true
+      remaining = remaining.substring(strMatch[0].length)
+      continue
+    }
+
+    const numMatch = remaining.match(/^\d+(\.\d+)?/)
+    if (numMatch) {
+      if (lastTokenWasValue) {
+        throw new Error('Unexpected number literal')
+      }
+      result += numMatch[0]
+      lastTokenWasValue = true
+      remaining = remaining.substring(numMatch[0].length)
+      continue
+    }
+
+    const boolMatch = remaining.match(/^(true|false)\b/)
+    if (boolMatch) {
+      if (lastTokenWasValue) {
+        throw new Error('Unexpected boolean literal')
+      }
+      result += boolMatch[0]
+      lastTokenWasValue = true
+      remaining = remaining.substring(boolMatch[0].length)
+      continue
+    }
+
+    const opMatch = remaining.match(/^\+/)
+    if (opMatch) {
+      if (!lastTokenWasValue) {
+        throw new Error('Unexpected operator +')
+      }
+      lastTokenWasValue = false
+      remaining = remaining.substring(opMatch[0].length)
+      continue
+    }
+
+    throw new Error('Unsafe token or syntax error')
+  }
+
+  if (!lastTokenWasValue && code.trim().length > 0) {
+    throw new Error('Trailing operator')
+  }
+
+  return result
+}
+
 function favicon () {
   return utils.extractFilename(config.get('application.favicon'))
 }
@@ -58,12 +127,12 @@ export function getUserProfile () {
         if (!code) {
           throw new Error('Username is null')
         }
-        username = eval(code) // eslint-disable-line no-eval
+        username = safeEvaluate(code)
       } catch (err) {
-        username = '\\' + username
+        username = '\\\\' + username
       }
     } else {
-      username = '\\' + username
+      username = '\\\\' + username
     }
 
     const themeKey = config.get<string>('application.theme') as keyof typeof themes
